@@ -1,6 +1,6 @@
 # Hermes Agent Custom Skills
 
-A curated collection of 12 high-value custom skills for [Hermes Agent](https://github.com/NousResearch/hermes-agent), covering DevOps, Security, Productivity, and GitHub workflows.
+A curated collection of 14 high-value custom skills for [Hermes Agent](https://github.com/NousResearch/hermes-agent), covering DevOps, Security, Productivity, Education, GitHub workflows, and social automation.
 
 ## Skills Overview
 
@@ -18,6 +18,8 @@ A curated collection of 12 high-value custom skills for [Hermes Agent](https://g
 | 10 | `session-recall` | Productivity | Systematic session recall with cross-referenced memory search | ✅ Stable |
 | 11 | `caveman` | Productivity | Concise reply mode for WeChat/mobile channels — cut fluff, keep substance | ✅ Stable |
 | 12 | `github-security-audit` | GitHub | Audit repos for leaked secrets, credentials, and sensitive information | ✅ Stable |
+| 13 | `exam-quiz-generator` | Education | Turn question banks into study cards, quizzes, and learning plans | ✅ Stable |
+| 14 | `hermes-tweet` | Social | Use approval-gated Xquik tools for X research and automation | ✅ Stable |
 
 ## Installation
 
@@ -29,17 +31,11 @@ A curated collection of 12 high-value custom skills for [Hermes Agent](https://g
 ### Quick Install
 
 ```bash
-# Clone the skills repo
-git clone https://github.com/gegewu81/hermes-skills.git /tmp/hermes-skills
+hermes skills tap add gegewu81/hermes-skills
+hermes skills install gegewu81/hermes-skills/<skill-name>
 
-# Copy desired skills into Hermes
-cp -r /tmp/hermes-skills/skills/<skill-name> ~/.hermes/skills/<category>/
-
-# Example: install agent-clone
-cp -r /tmp/hermes-skills/skills/agent-clone ~/.hermes/skills/devops/
-
-# Example: install immune-system
-cp -r /tmp/hermes-skills/skills/immune-system ~/.hermes/skills/security/
+# Example: install Hermes Tweet
+hermes skills install gegewu81/hermes-skills/hermes-tweet
 ```
 
 ### Install All Skills
@@ -60,9 +56,14 @@ hermes-skills/
 │   │   └── SKILL.md
 │   ├── caveman/
 │   │   └── SKILL.md
+│   ├── exam-quiz-generator/
+│   │   ├── SKILL.md
+│   │   └── references/
 │   ├── github-security-audit/
 │   │   └── SKILL.md
 │   ├── hermes-clone/
+│   │   └── SKILL.md
+│   ├── hermes-tweet/
 │   │   └── SKILL.md
 │   ├── hermes-multi-provider/
 │   │   ├── SKILL.md
@@ -73,7 +74,9 @@ hermes-skills/
 │   ├── immune-system/
 │   │   └── SKILL.md
 │   ├── sensitive-data-redact/
-│   │   └── SKILL.md
+│   │   ├── SKILL.md
+│   │   └── scripts/
+│   │       └── redact_text_files.py
 │   ├── session-recall/
 │   │   ├── SKILL.md
 │   │   └── references/
@@ -85,6 +88,8 @@ hermes-skills/
 │   │   └── SKILL.md
 │   └── state-db-repair/
 │       └── SKILL.md
+├── tests/
+│   └── test_redact_text_files.py
 ├── LICENSE
 ├── .gitignore
 └── README.md
@@ -93,3 +98,5 @@ hermes-skills/
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.
+
+Xquik is an independent third-party service. Not affiliated with X Corp. "Twitter" and "X" are trademarks of X Corp.

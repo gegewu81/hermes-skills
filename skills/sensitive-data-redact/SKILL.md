@@ -1,7 +1,7 @@
 ---
 name: sensitive-data-redact
 description: "Safely redact sensitive data (passwords, keys) from Hermes data stores. Covers the critical pitfall of binary replacement on SQLite databases and the recovery procedure if it happens."
-version: 1.0.0
+version: 1.1.0
 author: Hermes Agent
 metadata:
   hermes:
@@ -21,9 +21,18 @@ When a user shares a password or secret and later asks to remove it from all sto
 
 ## Safe Redaction Protocol
 
-### Step 1: Text files — sed is safe
+### Step 1: Text files — use literal replacement
 
-These files are text-based and safe for sed replacement:
+Do not put a secret in a shell command, argument, environment variable, or
+regular expression. Shell history and process listings can retain it. Regex
+characters can also change which text gets replaced.
+
+Use the bundled helper. It prompts without echoing the secret, treats it as
+literal UTF-8 text, skips symlinks and binary files, and defaults to a dry run.
+Run it in an interactive local terminal, never through chat or a remote prompt.
+
+These file types are eligible:
+
 - Session JSON files: `~/.hermes/sessions/*.json`
 - Session JSONL files: `~/.hermes/sessions/*.jsonl`
 - Skills: `~/.hermes/skills/**/*.md`
@@ -31,31 +40,47 @@ These files are text-based and safe for sed replacement:
 - Scripts: `~/.hermes/scripts/*`, `~/.hermes/skills/**/scripts/*`
 
 ```bash
-find ~/.hermes -type f \( -name "*.json" -o -name "*.jsonl" -o -name "*.md" -o -name "*.log" -o -name "*.yaml" -o -name "*.txt" -o -name "*.py" -o -name "*.sh" \) \
-  -exec sed -i "s/PASSWORD_TO_REMOVE/***REDACTED***/g" {} +
+python3 ${HERMES_SKILL_DIR}/scripts/redact_text_files.py --root ~/.hermes
+python3 ${HERMES_SKILL_DIR}/scripts/redact_text_files.py --root ~/.hermes --apply
 ```
+
+Review every skipped-file warning. Increase `--max-bytes` only after checking
+the file type and available memory.
 
 ### Step 2: SQLite databases — use SQL UPDATE
 
 For `state.db` (sessions, messages) and `memory_store.db` (Holographic Memory):
 
 ```python
+from getpass import getpass
 import sqlite3
 
-conn = sqlite3.connect("/home/<username>/.hermes/state.db")
-# Update message content
-conn.execute("UPDATE messages SET content = REPLACE(content, 'PASSWORD', '***REDACTED***')")
-conn.commit()
-conn.close()
+secret = getpass("Secret to redact: ")
+if not secret:
+    raise SystemExit("Secret cannot be empty")
+
+with sqlite3.connect("/home/<username>/.hermes/state.db") as conn:
+    if conn.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+        raise SystemExit("Database is not healthy. Stop and restore it first.")
+    conn.execute(
+        "UPDATE messages SET content = REPLACE(content, ?, ?) "
+        "WHERE instr(content, ?) > 0",
+        (secret, "***REDACTED***", secret),
+    )
+    integrity = conn.execute("PRAGMA integrity_check").fetchone()
+    if integrity != ("ok",):
+        raise RuntimeError(f"Integrity check failed: {integrity!r}")
 ```
 
-**This preserves byte alignment within pages** because REPLACE() handles the string operation correctly within SQLite's own buffer management. However, if the replacement is longer than the original, SQLite will expand the row within the page or move it — this is safe because SQLite handles its own page structure.
+Stop the Hermes gateway before changing a database. Parameterized SQL treats
+the secret literally and keeps it out of source text. SQLite safely handles row
+growth when the replacement length differs.
 
 ### Step 3: Verify
 
 ```bash
-# Search all files for the secret
-grep -rl "PASSWORD" ~/.hermes/ 2>/dev/null
+# A second dry run must report 0 matches.
+python3 ${HERMES_SKILL_DIR}/scripts/redact_text_files.py --root ~/.hermes
 # Check database integrity
 python3 -c "import sqlite3; c=sqlite3.connect('$HOME/.hermes/state.db'); print(c.execute('PRAGMA integrity_check').fetchone())"
 ```
@@ -155,14 +180,35 @@ conn.close()
 
 ## Memory/Holographic Store Redaction
 
-For `memory_store.db` (Holographic Memory), use the same SQL UPDATE approach:
+For `memory_store.db` (Holographic Memory), inspect its schema first. Update
+only allowlisted tables that have a `content` column:
 
 ```python
-conn = sqlite3.connect(os.path.expanduser("~/.hermes/memory_store.db"))
-for table in ["facts", "entities", "fact_entities"]:
-    try:
-        conn.execute(f"UPDATE {table} SET content = REPLACE(content, 'SECRET', '***REDACTED***')")
-    except: pass
-conn.commit()
-conn.close()
+from getpass import getpass
+import os
+import sqlite3
+
+secret = getpass("Secret to redact: ")
+if not secret:
+    raise SystemExit("Secret cannot be empty")
+
+with sqlite3.connect(
+    os.path.expanduser("~/.hermes/memory_store.db")
+) as conn:
+    if conn.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+        raise SystemExit("Database is not healthy. Stop and restore it first.")
+    for table in ("facts", "entities"):
+        columns = {
+            row[1] for row in conn.execute(f'PRAGMA table_info("{table}")')
+        }
+        if "content" not in columns:
+            continue
+        conn.execute(
+            f'UPDATE "{table}" SET content = REPLACE(content, ?, ?) '
+            "WHERE instr(content, ?) > 0",
+            (secret, "***REDACTED***", secret),
+        )
+    integrity = conn.execute("PRAGMA integrity_check").fetchone()
+    if integrity != ("ok",):
+        raise RuntimeError(f"Integrity check failed: {integrity!r}")
 ```
